@@ -8,28 +8,28 @@ let msgTeste;
 
 function preload() {
   player = new Player(64, 64);
-  chao = new Floor(0, 0, 2);
+  chao = new Floor(0, 0, 256, 256, [1, 2]);
   cam = new Camera(0, 0, 128, 128);
-  button = new Button(8 * 2, 8 * 4, [loadImage("assets/button1.png"), loadImage("assets/button2.png")]);
-  fonte = loadFont("assets/fonts/Minecraft.ttf");
+  button = new Button(8 * 2, 8 * 4, loadSprites("assets/sprites/button/", "button", 2));
+  fonte = loadFont("assets/fonts/MinecraftStandard.otf");
 }
 
 function setup() {
   createCanvas(640, 640);
   noSmooth();
   noStroke();
-  textSize(5);
+  textSize(4);
   // textStyle(BOLD);
   // fill(255);
   noCursor();
   textFont(fonte);
   msgTeste = new Speech(
     [
-      ["ola galerinha do youtube!", 4],
-      ["eh com muito prazer que vos apresento", 4],
-      ["o grande espetaculo...", 3],
+      ["olá galerinha do youtube!", 4],
+      ["é com muito prazer que vos apresento", 4],
+      ["o grande espetáculo...", 3],
       ["Deu a louca na Chapeuzinho 3!", 2],
-      ["O teste para bolhas esta completo.", 1],
+      ["O teste para bolhas está completo.", 1],
     ],
     40,
     10,
@@ -73,22 +73,44 @@ function isObj(test) {
   return typeof test == "object";
 }
 
+function loadSprites(folder, baseName, count) {
+  let imgarray = [];
+  for (let i = 1; i <= count; i++) {
+    let img = loadImage(folder + baseName + String(i) + ".png");
+    imgarray.push(img);
+  }
+  return imgarray;
+}
+
 //MARK:Player class
 class Player {
   constructor(x, y) {
     this.x = x;
     this.y = y;
-    this.sprite = loadImage("assets/pl1.png");
+    this.sprite;
+    this.estado;
+    this.lastEstado;
+
+    const animAndar = new Animation("andar", loadSprites("assets/sprites/player/", "pl", 2), 5, true);
+    const animIdle = new Animation("idle", loadSprites("assets/sprites/player/", "pl", 2), 40, true);
+    this.animador = new SpriteAnimator(this, [animAndar, animIdle]);
   }
 
   move() {
+    //MARK: TEMPORARIO ATE TER FISICA
+    let dx = this.x;
+    let dy = this.y;
     if (keyIsDown(68)) this.x++;
     if (keyIsDown(65)) this.x--;
     if (keyIsDown(83)) this.y++;
     if (keyIsDown(87)) this.y--;
+    dx -= this.x;
+    dy -= this.y;
+    this.MEF(dx, dy);
   }
 
   display() {
+    this.animador.play();
     //desenha o player na origem transladada pra não ter problema invertendo a escala
     push();
     translate(this.x, this.y);
@@ -96,20 +118,45 @@ class Player {
     image(this.sprite, -4, -4);
     pop();
   }
+
+  MEF(dx, dy) {
+    if (dx != 0 || dy != 0) {
+      this.estado = "movendo";
+    } else {
+      this.estado = "parado";
+    }
+    if (this.estado != this.lastEstado) {
+      this.onStateChange(this.lastEstado, this.estado);
+      this.lastEstado = this.estado;
+    }
+  }
+
+  onStateChange(oldState, newState) {
+    if (newState == "movendo") {
+      this.animador.changeAnim("andar");
+    }
+    if (newState == "parado") {
+      this.animador.changeAnim("idle");
+    }
+  }
 }
 
 //MARK:Floor class
 class Floor {
-  constructor(x, y, tile) {
+  constructor(x, y, width, height, tiles) {
     this.x = x;
     this.y = y;
-    this.sprite = loadImage("assets/tile" + tile + ".png");
+    this.width = width; // Largura do chão
+    this.height = height; // Altura do chão
+    this.tiles = tiles.map((tile) => loadImage("assets/sprites/tiles/tile" + tile + ".png"));
   }
 
   display() {
-    for (let y = this.y; y < this.y + 128; y += 7) {
-      for (let x = this.x; x < this.x + 128; x += 8) {
-        image(this.sprite, x, y);
+    for (let y = this.y; y < this.y + this.height; y += 7) {
+      for (let x = this.x; x < this.x + this.width; x += 8) {
+        // Escolha um tile aleatório com base em alguma regra
+        let index = floor(noise(x * 0.06, y * 0.06) * this.tiles.length);
+        image(this.tiles[index], x, y);
       }
     }
   }
@@ -222,7 +269,7 @@ class TimedText {
     fill(255);
     if (this.mode == CENTER) {
       const largura = textWidth(this.text.slice(0, (this.speed * this.time) / 10));
-      rect(this.x - largura / 2 - 5, this.y - textSize(), largura + 10, textSize() + 3, 5);
+      rect(this.x - largura / 2 - 5, this.y - textSize() - 1.5, largura + 10, textSize() + 3, 5);
     } else {
       rect(
         this.x - 5,
@@ -286,5 +333,45 @@ class Speech {
       } else {
         this.textoDaVez.follow(x, y);
       }
+  }
+}
+//MARK: SpriteAnimator class
+class SpriteAnimator {
+  constructor(parentObjReference, animationsArray) {
+    this.time = 0;
+    this.anims = animationsArray;
+    this.parent = parentObjReference;
+    this.currAnim = this.anims[0];
+    this.lastAnim = this.currAnim;
+    if (this.parent.sprite == undefined) this.parent.sprite = this.currAnim.getImage(0);
+  }
+
+  changeAnim(name) {
+    this.lastAnim = this.currAnim = this.anims.filter((animObj) => animObj.name == name)[0];
+    this.time = 0;
+  }
+
+  play() {
+    this.parent.sprite = this.currAnim.getImage(this.time);
+    this.time++;
+  }
+}
+//MARK: Animation class
+class Animation {
+  constructor(name, spriteArray, delayInFrames, loop = true) {
+    this.name = name;
+    this.sprites = spriteArray;
+    this.delay = delayInFrames;
+    this.loop = loop;
+  }
+
+  getImage(time) {
+    let index = floor(time / this.delay);
+    if (this.loop) {
+      index = index % this.sprites.length;
+    } else {
+      if (index >= this.sprites.length) index = this.sprites.length - 1;
+    }
+    return this.sprites[index];
   }
 }
