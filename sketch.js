@@ -5,6 +5,10 @@ let button;
 let cursorImg;
 let fonte;
 let msgTeste;
+let inimigoTeste;
+const objetosFixos = [];
+const objetosMoveis = [];
+let objetos = [];
 
 function preload() {
   player = new Player(64, 64);
@@ -12,6 +16,7 @@ function preload() {
   cam = new Camera(0, 0, 128, 128);
   button = new Button(8 * 2, 8 * 4, loadSprites("assets/sprites/button/", "button", 2));
   fonte = loadFont("assets/fonts/MinecraftStandard.otf");
+  inimigoTeste = new Enemy(50, 50, 10);
 }
 
 function setup() {
@@ -36,6 +41,8 @@ function setup() {
     20
   );
 
+  sortByZ(objetosFixos);
+
   //previne a pagina de scrollar
   window.addEventListener("keydown", (e) => {
     if (["ArrowUp", "ArrowDown"].includes(e.key)) {
@@ -44,6 +51,7 @@ function setup() {
   });
 }
 
+//MARK: DRAW
 function draw() {
   background(0);
   cam.follow(player);
@@ -52,18 +60,20 @@ function draw() {
   player.move();
   button.checkPress();
 
+  sortByZ(objetosMoveis);
+  ordenaObjetos();
+
   //render
-  chao.display();
-  button.display();
-  player.display();
+  objetos.forEach((obj) => obj.display());
   msgTeste.follow(player.x, player.y - 10);
   msgTeste.speak();
 
+  //mouse
   let pos = cam.getWorldMousePos();
   stroke(255);
   line(pos.x - 3, pos.y, pos.x + 3, pos.y);
   line(pos.x, pos.y - 3, pos.x, pos.y + 3);
-  // text("oie galera", cam.x, cam.y);
+  text(player.z + " " + inimigoTeste.z, cam.x, cam.y);
   // print(cam.worldToCam(cam.x, cam.y));
 
   cam.display();
@@ -96,18 +106,49 @@ function imageIfVisible(img, x, y) {
   }
 }
 
+function sortByZ(lista) {
+  lista.sort((a, b) => a.z - b.z);
+}
+
+function ordenaObjetos() {
+  objetos = [];
+  let i = 0;
+  let j = 0;
+  while (i < objetosFixos.length && j < objetosMoveis.length) {
+    if (objetosFixos[i].z <= objetosMoveis[j].z) {
+      objetos.push(objetosFixos[i]);
+      i++;
+    } else {
+      objetos.push(objetosMoveis[j]);
+      j++;
+    }
+  }
+  while (i < objetosFixos.length) {
+    objetos.push(objetosFixos[i]);
+    i++;
+  }
+  while (j < objetosMoveis.length) {
+    objetos.push(objetosMoveis[j]);
+    j++;
+  }
+}
+
 //MARK:Player class
 class Player {
   constructor(x, y) {
     this.x = x;
     this.y = y;
+    this.z = y + 4;
     this.sprite;
     this.estado;
     this.lastEstado;
+    this.health = 3;
 
     const animAndar = new Animation("andar", loadSprites("assets/sprites/player/", "pl", 2), 5, true);
     const animIdle = new Animation("idle", loadSprites("assets/sprites/player/", "pl", 2), 40, true);
     this.animador = new SpriteAnimator(this, [animAndar, animIdle]);
+
+    objetosMoveis.push(this);
   }
 
   move() {
@@ -121,6 +162,7 @@ class Player {
     dx -= this.x;
     dy -= this.y;
     this.MEF(dx, dy);
+    this.z = this.y + 4;
   }
 
   display() {
@@ -131,6 +173,10 @@ class Player {
     if (cam.getWorldMousePos().x < this.x) scale(-1, 1);
     image(this.sprite, -4, -4);
     pop();
+  }
+
+  damage(amount) {
+    this.health -= constrain(this.health - floor(amount), 0, this.health);
   }
 
   MEF(dx, dy) {
@@ -160,9 +206,11 @@ class Floor {
   constructor(x, y, width, height, tiles) {
     this.x = x;
     this.y = y;
+    this.z = y;
     this.width = width; // Largura do chão
     this.height = height; // Altura do chão
     this.tiles = tiles.map((tile) => loadImage("assets/sprites/tiles/tile" + tile + ".png"));
+    objetosFixos.push(this);
   }
 
   display() {
@@ -244,6 +292,8 @@ class Button {
     this.sprites = imgsOnOff;
     this.sprite = this.sprites[0];
     this.isPressed = false;
+    this.z = y + this.sprite.height;
+    objetosFixos.push(this);
   }
 
   display() {
@@ -390,4 +440,49 @@ class Animation {
     }
     return this.sprites[index];
   }
+}
+
+//MARK: Htibox class
+class Hitbox {
+  constructor(shape, x, y, w, h) {
+    this.shape = shape;
+    this.x = x;
+    this.y = y;
+    this.w = w;
+    this.h = h;
+  }
+
+  follow(x, y = x) {
+    if (isObj(x)) {
+      this.x = x.x;
+      this.y = y.y;
+    } else {
+      this.x = x;
+      this.y = y;
+    }
+  }
+
+  collides(hitbox) {}
+}
+
+//MARK: Enemy  class
+class Enemy {
+  constructor(x, y, dmg) {
+    this.x = x;
+    this.y = y;
+    this.damage = dmg;
+    this.estado = "spawned";
+    this.sprite = loadImage("assets/sprites/enemy/skel2.png");
+    this.z = y + 8;
+    // this.hitbox = new Hitbox("rect",x,y,w,h)
+    objetosMoveis.push(this);
+  }
+
+  move() {}
+
+  display() {
+    imageIfVisible(this.sprite, this.x, this.y);
+  }
+
+  MEF() {}
 }
