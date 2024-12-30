@@ -82,6 +82,20 @@ function loadSprites(folder, baseName, count) {
   return imgarray;
 }
 
+function imageIfVisible(img, x, y) {
+  //centro da tela = Camera.currentCamera.x, Camera.currentCamera.y
+  //larg, altura da tela = Camera.currentCamera.w, Camera.currentCamera.h
+  //da imagem = img.width, img.height
+  if (
+    y + img.height > Camera.currentCamera.y - Camera.currentCamera.h / 2 &&
+    y < Camera.currentCamera.y + Camera.currentCamera.h / 2 &&
+    x + img.width > Camera.currentCamera.x - Camera.currentCamera.w / 2 &&
+    x < Camera.currentCamera.x + Camera.currentCamera.w / 2
+  ) {
+    image(img, x, y);
+  }
+}
+
 //MARK:Player class
 class Player {
   constructor(x, y) {
@@ -156,7 +170,7 @@ class Floor {
       for (let x = this.x; x < this.x + this.width; x += 8) {
         // Escolha um tile aleatório com base em alguma regra
         let index = floor(noise(x * 0.06, y * 0.06) * this.tiles.length);
-        image(this.tiles[index], x, y);
+        imageIfVisible(this.tiles[index], x, y);
       }
     }
   }
@@ -164,6 +178,7 @@ class Floor {
 
 //MARK:Camera class
 class Camera {
+  static currentCamera;
   constructor(x, y, w, h) {
     this.x = x;
     this.y = y;
@@ -172,6 +187,7 @@ class Camera {
     // this.limX = 336;
     // this.limY = 336;
     // this.scale = 1;
+    Camera.currentCamera = this;
   }
 
   follow(alvoX, alvoY = alvoX) {
@@ -233,7 +249,7 @@ class Button {
   display() {
     if (this.isPressed) this.sprite = this.sprites[1];
     else this.sprite = this.sprites[0];
-    image(this.sprite, this.x, this.y);
+    imageIfVisible(this.sprite, this.x, this.y);
   }
 
   checkPress() {
