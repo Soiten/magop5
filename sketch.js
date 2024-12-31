@@ -58,6 +58,13 @@ function draw() {
 
   //fisica
   player.move();
+  //colocar em funcao separada
+  for (let inimigo of Enemy.inimigos) {
+    const info = player.hitbox.collidesWith(inimigo.hitbox);
+    if (info.collided) {
+      player.damage(3, inimigo);
+    }
+  }
   button.checkPress();
 
   sortByZ(objetosMoveis);
@@ -73,7 +80,7 @@ function draw() {
   stroke(255);
   line(pos.x - 3, pos.y, pos.x + 3, pos.y);
   line(pos.x, pos.y - 3, pos.x, pos.y + 3);
-  text(player.z + " " + inimigoTeste.z, cam.x, cam.y);
+  // text(player.z + " " + inimigoTeste.z, cam.x, cam.y);
   // print(cam.worldToCam(cam.x, cam.y));
 
   cam.display();
@@ -133,9 +140,17 @@ function ordenaObjetos() {
   }
 }
 
-//MARK:Player class
-class Player {
+//MARK: Entity class FIX
+class Entity {
+  constructor(shape, x, y, w, h) {
+    this.hitbox = new Hitbox(shape, x, y, w, h);
+  }
+}
+
+//MARK:Player class FIX
+class Player extends Entity {
   constructor(x, y) {
+    super("rect", x, y, 6, 3);
     this.x = x;
     this.y = y;
     this.z = y + 4;
@@ -143,6 +158,7 @@ class Player {
     this.estado;
     this.lastEstado;
     this.health = 3;
+    this.stunDuration = 0;
 
     const animAndar = new Animation("andar", loadSprites("assets/sprites/player/", "pl", 2), 5, true);
     const animIdle = new Animation("idle", loadSprites("assets/sprites/player/", "pl", 2), 40, true);
@@ -155,28 +171,41 @@ class Player {
     //MARK: TEMPORARIO ATE TER FISICA
     let dx = this.x;
     let dy = this.y;
-    if (keyIsDown(68)) this.x++;
-    if (keyIsDown(65)) this.x--;
-    if (keyIsDown(83)) this.y++;
-    if (keyIsDown(87)) this.y--;
-    dx -= this.x;
-    dy -= this.y;
-    this.MEF(dx, dy);
+    if (this.estado !== "stunned") {
+      if (keyIsDown(68)) this.x++;
+      if (keyIsDown(65)) this.x--;
+      if (keyIsDown(83)) this.y++;
+      if (keyIsDown(87)) this.y--;
+      dx -= this.x;
+      dy -= this.y;
+    } else {
+      this.stunDuration--;
+    }
     this.z = this.y + 4;
+    this.hitbox.follow(this.x - 3, this.y + 2);
+    this.MEF(dx, dy);
+  }
+
+  applyForce(x, y) {
+    this.x += x;
+    this.y += y;
   }
 
   display() {
     this.animador.play();
+    this.hitbox.debug();
     //desenha o player na origem transladada pra não ter problema invertendo a escala
     push();
     translate(this.x, this.y);
     if (cam.getWorldMousePos().x < this.x) scale(-1, 1);
-    image(this.sprite, -4, -4);
+    if (this.stunDuration % 4 <= 1) image(this.sprite, -4, -4);
     pop();
   }
 
-  damage(amount) {
+  damage(amount, source) {
     this.health -= constrain(this.health - floor(amount), 0, this.health);
+    this.stunDuration = 60;
+    this.applyForce(this.hitbox.center.x - source.hitbox.center.x, this.hitbox.center.y - source.hitbox.center.y);
   }
 
   MEF(dx, dy) {
@@ -185,6 +214,11 @@ class Player {
     } else {
       this.estado = "parado";
     }
+    if (this.stunDuration > 0) {
+      this.estado = "stunned";
+    }
+
+    //onstatechange
     if (this.estado != this.lastEstado) {
       this.onStateChange(this.lastEstado, this.estado);
       this.lastEstado = this.estado;
@@ -198,10 +232,15 @@ class Player {
     if (newState == "parado") {
       this.animador.changeAnim("idle");
     }
+    if (newState == "stunned") {
+      this.animador.pause();
+    } else {
+      this.animador.resume();
+    }
   }
 }
 
-//MARK:Floor class
+//MARK:Floor class FIX
 class Floor {
   constructor(x, y, width, height, tiles) {
     this.x = x;
@@ -284,7 +323,7 @@ class Camera {
   // canvasToWorld(x,y){} //pra substituir getWorldMousePos
 }
 
-//MARK:Button class
+//MARK:Button class FIX
 class Button {
   constructor(x, y, imgsOnOff) {
     this.x = x;
@@ -410,6 +449,7 @@ class SpriteAnimator {
     this.currAnim = this.anims[0];
     this.lastAnim = this.currAnim;
     if (this.parent.sprite == undefined) this.parent.sprite = this.currAnim.getImage(0);
+    this.paused = false;
   }
 
   changeAnim(name) {
@@ -418,8 +458,18 @@ class SpriteAnimator {
   }
 
   play() {
-    this.parent.sprite = this.currAnim.getImage(this.time);
-    this.time++;
+    if (!this.paused) {
+      this.parent.sprite = this.currAnim.getImage(this.time);
+      this.time++;
+    }
+  }
+
+  pause() {
+    this.paused = true;
+  }
+
+  resume() {
+    this.paused = false;
   }
 }
 //MARK: Animation class
@@ -444,12 +494,13 @@ class Animation {
 
 //MARK: Htibox class
 class Hitbox {
-  constructor(shape, x, y, w, h) {
-    this.shape = shape;
+  constructor(shape, x, y, w, h = w) {
+    this.shape = shape; //"circle", "rect", "point"
     this.x = x;
     this.y = y;
     this.w = w;
     this.h = h;
+    this.r = w;
   }
 
   follow(x, y = x) {
@@ -462,25 +513,121 @@ class Hitbox {
     }
   }
 
-  collides(hitbox) {}
+  debug() {
+    push();
+    noFill();
+    stroke(255);
+    strokeWeight(1);
+    if (this.shape == "rect") rect(this.x, this.y, this.w, this.h);
+    else if (this.shape == "circle") circle(this.x, this.y, this.r * 2);
+    else if (this.shape == "point") point(this.x, this.y);
+    pop();
+  }
+
+  collidesWith(hitbox) {
+    const collisionInfo = { collided: false, center: hitbox.center };
+    if (this.shape == "rect") {
+      if (hitbox.shape == "rect") {
+        collisionInfo.collided = this.rectRectCol(this, hitbox);
+      } else if (hitbox.shape == "circle") {
+        collisionInfo.collided = this.rectCircleCol(this, hitbox);
+      } else if (hitbox.shape == "point") {
+        collisionInfo.collided = this.rectPointCol(this, hitbox);
+      }
+    } else if (this.shape == "circle") {
+      if (hitbox.shape == "rect") {
+        collisionInfo.collided = this.rectCircleCol(hitbox, this);
+      } else if (hitbox.shape == "circle") {
+        collisionInfo.collided = this.circleCircleCol(this, hitbox);
+      } else if (hitbox.shape == "point") {
+        collisionInfo.collided = this.circlePointCol(this, hitbox);
+      }
+    } else if (this.shape == "point") {
+      if (hitbox.shape == "rect") {
+        collisionInfo.collided = this.rectPointCol(hitbox, this);
+      } else if (hitbox.shape == "circle") {
+        collisionInfo.collided = this.circlePointCol(hitbox, this);
+      } else if (hitbox.shape == "point") {
+        if (this.x == hitbox.x && this.y == hitbox.y) {
+          collisionInfo.collided = true;
+        }
+      }
+    }
+    return collisionInfo;
+  }
+
+  rectCircleCol(r, c) {
+    let testx = c.x,
+      testy = c.y;
+    if (testx < r.x) testx = r.x;
+    else if (testx > r.x + r.w) testx = r.x + r.w;
+    if (testy < r.y) testy = r.y;
+    else if (testy > r.y + r.h) testy = r.y + r.h;
+
+    if (dist(c.x, c.y, testx, testy) < c.r) {
+      return true;
+    }
+    return false;
+  }
+
+  rectPointCol(r, p) {
+    if (r.x < p.x && r.x + r.w > p.x && p.y > r.y && p.y < r.y + r.h) {
+      return true;
+    }
+    return false;
+  }
+
+  rectRectCol(r1, r2) {
+    if (r1.x + r1.w > r2.x && r1.x < r2.x + r2.w && r1.y + r1.h > r2.y && r1.y < r2.y + r2.h) {
+      return true;
+    }
+    return false;
+  }
+
+  circlePointCol(c, p) {
+    if (dist(c.x, c.y, p.x, p.y) < c.r) {
+      return true;
+    }
+    return false;
+  }
+
+  circleCircleCol(c1, c2) {
+    if (dist(c1.x, c1.y, c2.x, c2.y) < c1.r + c2.r) {
+      return true;
+    }
+    return false;
+  }
+
+  get center() {
+    if (this.shape == "rect") {
+      return { x: this.x + this.w / 2, y: this.y + this.h / 2 };
+    } else {
+      return { x: this.x, y: this.y };
+    }
+  }
 }
 
-//MARK: Enemy  class
-class Enemy {
+//MARK: Enemy class FIX
+class Enemy extends Entity {
+  static inimigos = [];
   constructor(x, y, dmg) {
+    super("rect", x + 2, y + 7, 4, 3);
     this.x = x;
     this.y = y;
     this.damage = dmg;
     this.estado = "spawned";
     this.sprite = loadImage("assets/sprites/enemy/skel2.png");
     this.z = y + 8;
-    // this.hitbox = new Hitbox("rect",x,y,w,h)
     objetosMoveis.push(this);
+    Enemy.inimigos.push(this);
   }
 
-  move() {}
+  move() {
+    this.hitbox.follow(this.x, this.y);
+  }
 
   display() {
+    this.hitbox.debug();
     imageIfVisible(this.sprite, this.x, this.y);
   }
 
