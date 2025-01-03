@@ -6,6 +6,7 @@ let cursorImg;
 let fonte;
 let msgTeste;
 let inimigoTeste;
+let mundoCanvas;
 const objetosFixos = [];
 const objetosMoveis = [];
 let objetos = [];
@@ -21,13 +22,16 @@ function preload() {
 
 function setup() {
   createCanvas(640, 640);
+  mundoCanvas = createGraphics(128, 128);
+  mundoCanvas.noSmooth();
+  mundoCanvas.noStroke();
+  mundoCanvas.pixelDensity(4);
+  mundoCanvas.textSize(4);
+  mundoCanvas.textFont(fonte);
   noSmooth();
-  noStroke();
-  textSize(4);
   // textStyle(BOLD);
   // fill(255);
   noCursor();
-  textFont(fonte);
   msgTeste = new Speech(
     [
       ["olá galerinha do youtube!", 4],
@@ -53,7 +57,7 @@ function setup() {
 
 //MARK: DRAW
 function draw() {
-  background(0);
+  mundoCanvas.background(0);
   cam.follow(player);
 
   //fisica
@@ -77,9 +81,9 @@ function draw() {
 
   //mouse
   let pos = cam.getWorldMousePos();
-  stroke(255);
-  line(pos.x - 3, pos.y, pos.x + 3, pos.y);
-  line(pos.x, pos.y - 3, pos.x, pos.y + 3);
+  mundoCanvas.stroke(255);
+  mundoCanvas.line(pos.x - 3, pos.y, pos.x + 3, pos.y);
+  mundoCanvas.line(pos.x, pos.y - 3, pos.x, pos.y + 3);
   // text(player.z + " " + inimigoTeste.z, cam.x, cam.y);
   // print(cam.worldToCam(cam.x, cam.y));
 
@@ -103,13 +107,15 @@ function imageIfVisible(img, x, y) {
   //centro da tela = Camera.currentCamera.x, Camera.currentCamera.y
   //larg, altura da tela = Camera.currentCamera.w, Camera.currentCamera.h
   //da imagem = img.width, img.height
+
+  const cam = Camera.currentCamera;
   if (
-    y + img.height > Camera.currentCamera.y - Camera.currentCamera.h / 2 &&
-    y < Camera.currentCamera.y + Camera.currentCamera.h / 2 &&
-    x + img.width > Camera.currentCamera.x - Camera.currentCamera.w / 2 &&
-    x < Camera.currentCamera.x + Camera.currentCamera.w / 2
+    y + img.height > cam.y - cam.h / 2 &&
+    y < cam.y + cam.h / 2 &&
+    x + img.width > cam.x - cam.w / 2 &&
+    x < cam.x + cam.w / 2
   ) {
-    image(img, x, y);
+    mundoCanvas.image(img, x, y);
   }
 }
 
@@ -195,11 +201,11 @@ class Player extends Entity {
     this.animador.play();
     this.hitbox.debug();
     //desenha o player na origem transladada pra não ter problema invertendo a escala
-    push();
-    translate(this.x, this.y);
-    if (cam.getWorldMousePos().x < this.x) scale(-1, 1);
-    if (this.stunDuration % 4 <= 1) image(this.sprite, -4, -4);
-    pop();
+    mundoCanvas.push();
+    mundoCanvas.translate(this.x, this.y);
+    if (cam.getWorldMousePos().x < this.x) mundoCanvas.scale(-1, 1);
+    if (this.stunDuration % 4 <= 1) mundoCanvas.image(this.sprite, -4, -4);
+    mundoCanvas.pop();
   }
 
   damage(amount, source) {
@@ -287,13 +293,15 @@ class Camera {
     }
     // this.x = constrain(this.x, -100000, this.limX);
     // this.y = constrain(this.y, -100000, this.limY);
-    translate(-this.x + width / 2, -this.y + height / 2);
+    mundoCanvas.push();
+    mundoCanvas.translate(-this.x + mundoCanvas.width / 2, -this.y + mundoCanvas.height / 2);
   }
 
   display() {
-    resetMatrix();
+    mundoCanvas.resetMatrix();
+    mundoCanvas.pop();
     //pega os pixels do meio da tela e escala
-    let tela = get(width / 2 - this.w / 2, height / 2 - this.h / 2, this.w, this.h);
+    let tela = mundoCanvas.get(mundoCanvas.width / 2 - this.w / 2, mundoCanvas.height / 2 - this.h / 2, this.w, this.h);
     image(tela, 0, 0, width, height);
   }
 
@@ -368,25 +376,31 @@ class TimedText {
 
   show() {
     this.tick();
-    push();
-    textAlign(this.mode);
-    noStroke();
-    fill(255);
+    mundoCanvas.push();
+    mundoCanvas.textAlign(this.mode);
+    mundoCanvas.noStroke();
+    mundoCanvas.fill(255);
     if (this.mode == CENTER) {
-      const largura = textWidth(this.text.slice(0, (this.speed * this.time) / 10));
-      rect(this.x - largura / 2 - 5, this.y - textSize() - 1.5, largura + 10, textSize() + 3, 5);
+      const largura = mundoCanvas.textWidth(this.text.slice(0, (this.speed * this.time) / 10));
+      mundoCanvas.rect(
+        this.x - largura / 2 - 5,
+        this.y - mundoCanvas.textSize() - 1.5,
+        largura + 10,
+        mundoCanvas.textSize() + 3,
+        5
+      );
     } else {
-      rect(
+      mundoCanvas.rect(
         this.x - 5,
-        this.y - textSize(),
-        textWidth(this.text.slice(0, (this.speed * this.time) / 10)) + 10,
-        textSize() + 5,
+        this.y - mundoCanvas.textSize(),
+        mundoCanvas.textWidth(this.text.slice(0, (this.speed * this.time) / 10)) + 10,
+        mundoCanvas.textSize() + 5,
         5
       );
     }
-    fill(0);
-    text(this.text.slice(0, (this.speed * this.time) / 10), this.x, this.y);
-    pop();
+    mundoCanvas.fill(0);
+    mundoCanvas.text(this.text.slice(0, (this.speed * this.time) / 10), this.x, this.y);
+    mundoCanvas.pop();
   }
 
   follow(x, y = x) {
@@ -514,14 +528,14 @@ class Hitbox {
   }
 
   debug() {
-    push();
-    noFill();
-    stroke(255);
-    strokeWeight(1);
-    if (this.shape == "rect") rect(this.x, this.y, this.w, this.h);
-    else if (this.shape == "circle") circle(this.x, this.y, this.r * 2);
-    else if (this.shape == "point") point(this.x, this.y);
-    pop();
+    mundoCanvas.push();
+    mundoCanvas.noFill();
+    mundoCanvas.stroke(255);
+    mundoCanvas.strokeWeight(1);
+    if (this.shape == "rect") mundoCanvas.rect(this.x, this.y, this.w, this.h);
+    else if (this.shape == "circle") mundoCanvas.circle(this.x, this.y, this.r * 2);
+    else if (this.shape == "point") mundoCanvas.point(this.x, this.y);
+    mundoCanvas.pop();
   }
 
   collidesWith(hitbox) {
